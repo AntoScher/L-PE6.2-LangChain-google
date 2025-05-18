@@ -6,20 +6,13 @@ from utils.deepseek import DeepSeekClient
 
 def run_react_agent():
     tools = setup_tools()
-    model = DeepSeekClient()  # Кастомный клиент
+    model = DeepSeekClient()
 
-    # ReAct промпт
-    react_prompt = hub.pull("hwchase17/react")
-
-    # Создаем агента
-    agent = create_react_agent(model, tools, react_prompt)
+    prompt = hub.pull("hwchase17/react")
+    agent = create_react_agent(model, tools, prompt)
     executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
-    # Пример запроса
-    response = executor.invoke({
-        "input": "Назови 3 самых популярных музея в Париже",
-        "chat_history": []  # Поддержка истории
-    })
+    response = executor.invoke({"input": "Назови 3 популярных музея в Париже"})
     print("Ответ:", response["output"])
 
 

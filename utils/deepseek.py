@@ -1,45 +1,88 @@
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.callbacks import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
+from langchain_core.outputs import ChatResult, ChatGeneration, LLMResult
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptValue
+from typing import Optional, List, Dict, Any, Union
 import requests
-from typing import List, Dict, Optional
-from .config import DEEPSEEK_API_KEY
+from utils.config import DEEPSEEK_API_KEY
 
 
-class DeepSeekClient:
-    def __init__(self):
-        self.api_key = DEEPSEEK_API_KEY
-        # Актуальный URL из документации DeepSeek (пример)
-        self.base_url = "https://api.deepseek.com/v1/chat/completions"
+class DeepSeekChat(BaseLanguageModel):
+    """Полная реализация модели DeepSeek для LangChain"""
 
-    def generate(
-            self,
-            messages: List[Dict],
-            model: str = "deepseek-chat",
-            temperature: float = 0.7,
-            max_tokens: Optional[int] = 300,  # Добавлен параметр длины ответа
-            stream: bool = False,  # Потоковый режим
-            **kwargs  # Доп. параметры
-    ) -> str:
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        # Преобразуем сообщения LangChain в формат DeepSeek
+        formatted_messages = [
+            {"role": "user" if isinstance(msg, HumanMessage) else "assistant", "content": msg.content}
+            for msg in messages
+        ]
+        response = self._call_api(formatted_messages)
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=response))])
+
+    def _call_api(self, messages: List[Dict]) -> str:
+        """Вызов API DeepSeek"""
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
         }
-
         payload = {
-            "model": model,
+            "model": "deepseek-chat",
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": stream,
-            **kwargs  # Остальные параметры из документации
+            "temperature": 0.7
         }
+        response = requests.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload)
+        return response.json()["choices"][0]["message"]["content"]
 
-        try:
-            response = requests.post(self.base_url, headers=headers, json=payload)
-            response.raise_for_status()  # Проверка на HTTP-ошибки
-            return response.json()["choices"][0]["message"]["content"]
+    # Реализация недостающих методов
+    def generate_prompt(
+        self,
+        prompts: List[ChatPromptValue],
+        stop: Optional[List[str]] = None,
+        callbacks: CallbackManagerForLLMRun = None,
+        **kwargs: Any,
+    ) -> LLMResult:
+        generations = []
+        for prompt in prompts:
+            result = self._generate(prompt.messages, stop, callbacks)
+            generations.append([gen.text for gen in result.generations])
+        return LLMResult(generations=generations)
 
-        except requests.exceptions.HTTPError as e:
-            error_msg = f"HTTP Error: {e.response.status_code} - {e.response.text}"
-            raise Exception(error_msg)
-        except KeyError:
-            raise Exception("Invalid API response format")
+    def invoke(self, input: Union[str, ChatPromptValue], **kwargs) -> Union[str, BaseMessage]:
+        if isinstance(input, str):
+            return self.predict(input, **kwargs)
+        return self.predict_messages(input.messages, **kwargs)
+
+    def predict(self, text: str, **kwargs: Any) -> str:
+        return self._generate([HumanMessage(content=text)]).generations[0].message.content
+
+    def predict_messages(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> BaseMessage:
+        return self._generate(messages, stop).generations[0].message
+
+    @property
+    def _llm_type(self) -> str:
+        return "deepseek-chat"
+
+    # Заглушки для асинхронных методов
+    async def _agenerate(self, *args, **kwargs):
+        raise NotImplementedError("Async не поддерживается")
+
+    async def agenerate_prompt(self, *args, **kwargs):
+        raise NotImplementedError("Async не поддерживается")
+
+    async def apredict(self, *args, **kwargs):
+        raise NotImplementedError("Async не поддерживается")
+
+    async def apredict_messages(self, *args, **kwargs):
+        raise NotImplementedError("Async не поддерживается")
