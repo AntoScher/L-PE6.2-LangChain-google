@@ -2,8 +2,8 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.outputs import ChatResult, ChatGeneration, LLMResult
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langchain_core.prompts import ChatPromptValue
-from typing import Optional, List, Dict, Any, Union
+from langchain_core.prompt_values import ChatPromptValue
+from typing import Optional, List, Dict, Any, Union, Iterator
 import requests
 from utils.config import DEEPSEEK_API_KEY
 
@@ -40,8 +40,7 @@ class DeepSeekChat(BaseLanguageModel):
         response = requests.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload)
         return response.json()["choices"][0]["message"]["content"]
 
-    # Реализация недостающих методов
-    def generate_prompt(
+    def generate(
         self,
         prompts: List[ChatPromptValue],
         stop: Optional[List[str]] = None,
@@ -53,6 +52,9 @@ class DeepSeekChat(BaseLanguageModel):
             result = self._generate(prompt.messages, stop, callbacks)
             generations.append([gen.text for gen in result.generations])
         return LLMResult(generations=generations)
+
+    def stream(self, input: Union[str, ChatPromptValue], **kwargs) -> Iterator[BaseMessage]:
+        raise NotImplementedError("Streaming не поддерживается")
 
     def invoke(self, input: Union[str, ChatPromptValue], **kwargs) -> Union[str, BaseMessage]:
         if isinstance(input, str):
@@ -78,7 +80,13 @@ class DeepSeekChat(BaseLanguageModel):
     async def _agenerate(self, *args, **kwargs):
         raise NotImplementedError("Async не поддерживается")
 
-    async def agenerate_prompt(self, *args, **kwargs):
+    async def agenerate(self, *args, **kwargs):
+        raise NotImplementedError("Async не поддерживается")
+
+    async def astream(self, *args, **kwargs):
+        raise NotImplementedError("Async не поддерживается")
+
+    async def ainvoke(self, *args, **kwargs):
         raise NotImplementedError("Async не поддерживается")
 
     async def apredict(self, *args, **kwargs):
